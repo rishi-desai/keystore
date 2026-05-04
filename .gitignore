@@ -1,0 +1,5 @@
+# Encrypted vault — never commit this
+.keys.enc
+
+# Session cache files
+/tmp/.keys_sess_*
