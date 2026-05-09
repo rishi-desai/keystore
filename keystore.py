@@ -15,7 +15,7 @@ Usage:
 
 Keys are organised into optional folders/projects.
 Master password is cached for the life of your terminal session.
-WSL clipboard: uses clip.exe (Windows), xclip, or xsel.
+Clipboard: uses pbcopy (macOS), clip.exe (WSL/Windows), xclip, or xsel.
 Requires: pip install cryptography
 Optional: sudo apt install fzf   (for live fuzzy search in the picker)
 """
@@ -24,6 +24,7 @@ import base64
 import getpass as _getpass
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -60,7 +61,16 @@ def _cache_path():
     return f"/tmp/.keys_sess_{os.getppid()}"
 
 def _parent_alive():
-    return os.path.exists(f"/proc/{os.getppid()}")
+    ppid = os.getppid()
+    if ppid <= 1:
+        return False
+    try:
+        os.kill(ppid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
 
 def _save_cached_pw(pw):
     path = _cache_path()
@@ -87,16 +97,31 @@ def _load_cached_pw():
 # ---------------------------------------------------------------------------
 # Clipboard
 # ---------------------------------------------------------------------------
+def _clipboard_backends():
+    if sys.platform == "darwin":
+        return [
+            ("pbcopy (macOS)", ["pbcopy"], None),
+            ("clip.exe (WSL/Windows)", ["clip.exe"], "utf-16-le"),
+            ("xclip", ["xclip", "-selection", "clipboard"], None),
+            ("xsel", ["xsel", "--clipboard", "--input"], None),
+        ]
+    return [
+        ("clip.exe (WSL/Windows)", ["clip.exe"], "utf-16-le"),
+        ("xclip", ["xclip", "-selection", "clipboard"], None),
+        ("xsel", ["xsel", "--clipboard", "--input"], None),
+    ]
+
+def _available_clipboard_backend():
+    for name, cmd, _encoding in _clipboard_backends():
+        if shutil.which(cmd[0]):
+            return name
+    return None
+
 def copy_to_clipboard(text):
-    try:
-        subprocess.run(["clip.exe"], input=text.encode("utf-16-le"),
-                       check=True, stderr=subprocess.DEVNULL)
-        return True
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        pass
-    for cmd in (["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]):
+    for _name, cmd, encoding in _clipboard_backends():
         try:
-            subprocess.run(cmd, input=text.encode(), check=True, stderr=subprocess.DEVNULL)
+            subprocess.run(cmd, input=text.encode(encoding or "utf-8"),
+                           check=True, stderr=subprocess.DEVNULL)
             return True
         except (FileNotFoundError, subprocess.CalledProcessError):
             pass
@@ -525,7 +550,6 @@ def cmd_delete(query):
 # ---------------------------------------------------------------------------
 def cmd_setup():
     """Walk a new user through installation and first-run checks."""
-    import shutil
     script  = os.path.realpath(__file__)
     bin_dir = os.path.join(os.path.expanduser("~"), "bin")
     link    = os.path.join(bin_dir, "keys")
@@ -552,17 +576,14 @@ def cmd_setup():
         print(f"        {col(C.BOLD, 'sudo apt install fzf')}  or  {col(C.BOLD, 'brew install fzf')}")
 
     # 4. Clipboard backend
-    clip_backend = None
-    if shutil.which("clip.exe"):
-        clip_backend = "clip.exe (WSL/Windows)"
-    elif shutil.which("xclip"):
-        clip_backend = "xclip"
-    elif shutil.which("xsel"):
-        clip_backend = "xsel"
+    clip_backend = _available_clipboard_backend()
     if clip_backend:
         print(f"  {col(C.GREEN, '✓')}  Clipboard: {clip_backend}")
     else:
-        print(f"  {col(C.RED, '✗')}  No clipboard backend — install xclip: {col(C.BOLD, 'sudo apt install xclip')}")
+        if sys.platform == "darwin":
+            print(f"  {col(C.RED, '✗')}  No clipboard backend — expected macOS pbcopy")
+        else:
+            print(f"  {col(C.RED, '✗')}  No clipboard backend — install xclip: {col(C.BOLD, 'sudo apt install xclip')}")
 
     # 5. ~/bin symlink
     os.makedirs(bin_dir, exist_ok=True)
@@ -623,7 +644,7 @@ HELP = f"""
     Prompted once per terminal session — cached until you close the terminal.
 
   {col(C.YELLOW, 'Clipboard:')}
-    clip.exe (WSL/Windows) → xclip → xsel
+    pbcopy (macOS) → clip.exe (WSL/Windows) → xclip → xsel
 
   {col(C.YELLOW, 'Vault:')}
     {VAULT_FILE}  (AES-128-CBC · PBKDF2-SHA256 · {PBKDF2_ITERS:,} iters · mode 600)
