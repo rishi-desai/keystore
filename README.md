@@ -1,7 +1,7 @@
 # keys — API Key & Token Manager
 
 A simple CLI tool to securely store and copy API keys, PATs, and access tokens to your clipboard.  
-Works in **WSL**, **MobaXterm**, **PowerShell** (via Git Bash / Python), and native Linux.
+Works in **macOS**, **WSL**, **MobaXterm**, **PowerShell** (via Git Bash / Python), and native Linux.
 
 Keys are encrypted at rest. Your master password is asked **once per terminal session** — cached until you close that terminal.
 
@@ -10,7 +10,7 @@ Keys are encrypted at rest. Your master password is asked **once per terminal se
 ## Features
 
 - Encrypted vault (AES-128-CBC + PBKDF2-SHA256, 480k iterations)
-- Clipboard support — `clip.exe` on WSL/Windows, `xclip`/`xsel` on Linux
+- Clipboard support — `pbcopy` on macOS, `clip.exe` on WSL/Windows, `xclip`/`xsel` on Linux
 - Session password cache — one prompt per terminal, then silent
 - Organise keys into **folders/projects** (optional)
 - Interactive picker (`keys` with no args) — stays open, Ctrl+C to exit
@@ -27,6 +27,7 @@ Keys are encrypted at rest. Your master password is asked **once per terminal se
 | Python 3.8+       | **Yes**  | Pre-installed on most systems            |
 | `cryptography`    | **Yes**  | `pip install cryptography`               |
 | `fzf`             | No       | Live fuzzy search in the picker          |
+| `pbcopy`          | No       | Pre-installed on macOS                   |
 | `clip.exe`        | No       | Pre-installed in WSL — Windows clipboard |
 | `xclip` or `xsel` | No       | Native Linux clipboard                   |
 
@@ -61,6 +62,33 @@ export PATH="$HOME/bin:$PATH"
 
 ---
 
+### macOS
+
+```bash
+# Install Python dependencies
+python3 -m pip install cryptography
+
+# Optional: live fuzzy search
+brew install fzf
+
+# Clone the repo
+git clone https://github.com/rishi-desai/keystore.git
+
+# Run setup (creates ~/bin/keys and checks everything)
+cd ~/.../keystore/
+python3 keystore.py setup
+```
+
+Clipboard copy uses macOS `pbcopy`, which is already installed. You do not need `xclip` on macOS.
+
+If `~/bin` is not on your PATH yet, setup will tell you. Add this to `~/.zshrc` and restart your terminal:
+
+```bash
+export PATH="$HOME/bin:$PATH"
+```
+
+---
+
 ### MobaXterm
 
 MobaXterm has a built-in Linux environment with Python. Open a MobaXterm local terminal and follow the same steps as WSL above.
@@ -77,7 +105,7 @@ Clipboard is handled via `xclip` if you have an X server active (MobaXterm runs 
 apt install xclip
 ```
 
-Or just skip it — if neither `xclip` nor `clip.exe` is found, the tool will print the key value instead so you can copy it manually.
+If neither `xclip` nor `clip.exe` is available, copy commands fail with a clipboard unavailable message.
 
 ---
 
@@ -240,4 +268,3 @@ scp ~/.../keystore/.keys.enc <new-machine>:~/keystore/.keys.enc
 # Then run keys normally — you'll be prompted for your master password once
 keys
 ```
-
